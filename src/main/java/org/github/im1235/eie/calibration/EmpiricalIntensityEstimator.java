@@ -41,6 +41,9 @@ class EmpiricalIntensityEstimator {
     private final double spread;
     private final long dt;
     private final Fill fillComp;
+    private boolean initializing = true;
+    private double lastPrice = Double.NaN;
+    private long lastLimitOrderInserted = 0;
 
     /**
      * trackers of limit orders that are not filled
@@ -67,12 +70,13 @@ class EmpiricalIntensityEstimator {
 
     /**
      * @param spread distance from mid price, use negative sign for buy limit and positive for sell limit
+     * @param spreadDirection -1 for sell limit orders, 1 for buy limit
      * @param dt
      */
-    EmpiricalIntensityEstimator(double spread, long dt) {
+    EmpiricalIntensityEstimator(double spread, double spreadDirection, long dt) {
         this.spread = spread;
         this.dt = dt;
-        if (spread > 0) {
+        if (spreadDirection > 0) {
             // concrete sell limit order fill comparator
             this.fillComp = new Fill() {
                 @Override
@@ -100,6 +104,32 @@ class EmpiricalIntensityEstimator {
      */
     void onTick(double refPrice, double fillPrice, long ts, long windowStart) {
 
+        if(this.initializing){
+            this.initializing = false;
+            this.lastLimitOrderInserted = ts - this.dt;
+        }
+
+        // insert new tracker every dt
+        while (this.lastLimitOrderInserted + this.dt < ts){
+            this.lastLimitOrderInserted = this.lastLimitOrderInserted + dt;
+            // add new tracker, price is last recived price
+            this.liveTrackers.add(
+                    new LimitOrderTracker(this.lastPrice + this.spread, this.lastLimitOrderInserted)
+            );
+            //add ts to sum of start timestamps
+            this.liveTrackersStartTimeSum += lastLimitOrderInserted;
+        }
+
+        // insert new tracker evrey dt
+        if (this.lastLimitOrderInserted + this.dt == ts){
+            this.lastLimitOrderInserted = ts;
+            // add new tracker, add ts to sum of start timestamps
+            this.liveTrackers.add(new LimitOrderTracker(refPrice + this.spread, ts));
+            this.liveTrackersStartTimeSum += ts;
+        }
+
+        this.lastPrice = refPrice;
+
         ListIterator<LimitOrderTracker> iter = this.liveTrackers.listIterator();
 
         while (iter.hasNext()) {
@@ -125,10 +155,6 @@ class EmpiricalIntensityEstimator {
                 this.finishedTrackersWaitTimeSum += duration;
             }
         }
-
-        // add new tracker, add ts to sum of start timestamps
-        iter.add(new LimitOrderTracker(refPrice + this.spread, ts));
-        this.liveTrackersStartTimeSum += ts;
     }
 
 
@@ -152,7 +178,7 @@ class EmpiricalIntensityEstimator {
         }
 
         // check if time passed from last tick
-        if (ts != this.liveTrackers.getLast().startTs) {
+        if (!this.liveTrackers.isEmpty() && ts != this.liveTrackers.getLast().startTs) {
             // iterate over unfinished order trackers
             ListIterator<LimitOrderTracker> iterLive = this.liveTrackers.listIterator();
             while (iterLive.hasNext()) {

@@ -33,7 +33,7 @@ public class SpreadIntensityCurve {
         this.intensityEstimates = new double[this.intensityEstimators.length];
         IntStream.range(0, nSpreads).forEach(i -> {
             spreadSpecification[i] = i * spreadStep;
-            this.intensityEstimators[i] = new EmpiricalIntensityEstimator(spreadSpecification[i], dt);
+            this.intensityEstimators[i] = new EmpiricalIntensityEstimator(spreadSpecification[i], Math.signum(spreadStep), dt);
         });
         this.akSolver = solverFactory.getSolver(spreadSpecification);
 

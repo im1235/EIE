@@ -41,7 +41,7 @@ class IntensityEstimatorTest {
      */
     double spreadStep = 0.00001;
     int nSteps = 5;
-    long w = 1000 * 60 * 60; // sliding window 30 min
+    long w = 1000 * 60 *10 ; // sliding window 30 min
     long dt = 1000 * 15; // time scaling 15 sec
 
 
@@ -76,6 +76,70 @@ class IntensityEstimatorTest {
         buyLimitEstimatorField = IntensityEstimator.class.getDeclaredField("buyExecutionIntensity");
         buyLimitEstimatorField.setAccessible(true);
 
+    }
+
+
+    @Test
+    void buyEstimatorTest() throws IllegalAccessException {
+        // create solver factory
+        AkSolverFactory sf = new AkSolverFactory(AkSolverFactory.SolverType.MULTI_CURVE);
+        // create buy intensity estimator
+        SpreadIntensityCurve buyExecutionIntensity = new SpreadIntensityCurve(-spreadStep, nSteps, dt, sf);
+        double[] buyEmpiricalIntensities = (double[]) intensityEstimatesField.get(buyExecutionIntensity);
+
+        long calibrationTs = this.testData.get(0).ts + w;
+           for (final TickData td : ProgressBar.wrap(this.testData, "buy test: ")) {
+                long windowStart = td.ts - w;
+                // send data to estimator
+                buyExecutionIntensity.onTick((td.b+td.a)/2, td.a, td.ts, windowStart);
+
+                if (calibrationTs<= td.ts) {
+                    // run estimates and get resulting IntensityInfo
+                    double[] estimates=  buyExecutionIntensity.estimateAk(td.ts, windowStart);
+                    int iPrev = 0;
+                    for (int i = 1; i < buyEmpiricalIntensities.length; i++) {
+                        assertTrue(buyEmpiricalIntensities[iPrev] > buyEmpiricalIntensities[i],
+                                String.format("Buy λ estimate %d/%d == %.6f/%6f",
+                                        iPrev,
+                                        i,
+                                        buyEmpiricalIntensities[iPrev],
+                                        buyEmpiricalIntensities[i]));
+                        iPrev = i;
+                    }
+                }
+           }
+    }
+
+
+    @Test
+    void sellEstimatorTest() throws IllegalAccessException {
+        // create solver factory
+        AkSolverFactory sf = new AkSolverFactory(AkSolverFactory.SolverType.MULTI_CURVE);
+        // create sell intensity estimator
+        SpreadIntensityCurve sellExecutionIntensity = new SpreadIntensityCurve(spreadStep, nSteps, dt, sf);
+        double[] buyEmpiricalIntensities = (double[]) intensityEstimatesField.get(sellExecutionIntensity);
+
+        long calibrationTs = this.testData.get(0).ts + w;
+           for (final TickData td : ProgressBar.wrap(this.testData, "sell test: ")) {
+                long windowStart = td.ts - w;
+                // send data to estimator
+                sellExecutionIntensity.onTick((td.b+td.a)/2, td.b, td.ts, windowStart);
+
+                if (calibrationTs<= td.ts) {
+                    // run estimates and get resulting IntensityInfo
+                    double[] estimates=  sellExecutionIntensity.estimateAk(td.ts, windowStart);
+                    int iPrev = 0;
+                    for (int i = 1; i < buyEmpiricalIntensities.length; i++) {
+                        assertTrue(buyEmpiricalIntensities[iPrev] > buyEmpiricalIntensities[i],
+                                String.format("Buy λ estimate %d/%d == %.6f/%6f",
+                                        iPrev,
+                                        i,
+                                        buyEmpiricalIntensities[iPrev],
+                                        buyEmpiricalIntensities[i]));
+                        iPrev = i;
+                    }
+                }
+           }
     }
 
 
